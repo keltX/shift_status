@@ -42,7 +42,10 @@ def get_person_shift_month(input_data):
     result = {}
     split_input = input_data.split("-")
     year = split_input[0]
-    sheet_name = "{}年{}月".format(*split_input[:2])
+    month = split_input[1]
+    if len(month)>2 and month[0]=="0":
+        month = month[1]
+    sheet_name = "{}年{}月".format(year,month)
     sheet = wb.worksheet(sheet_name)
     list_of_lists = sheet.get_all_values()
     chunked = [
