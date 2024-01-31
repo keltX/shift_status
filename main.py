@@ -4,10 +4,9 @@ from typing import Union
 from fastapi import FastAPI, Response
 from datetime import datetime
 import os,ast
+from dotenv import load_dotenv
 
-
-
-
+load_dotenv()
 credentials = ast.literal_eval(os.environ["CREDENTIALS"])
 authorized_user = ast.literal_eval(os.environ["AUTHORIZED_USER"])
 gc, authorized_user = gspread.oauth_from_dict(credentials, authorized_user)
@@ -43,7 +42,7 @@ def get_person_shift_month(input_data):
     split_input = input_data.split("-")
     year = split_input[0]
     month = split_input[1]
-    if len(month)>2 and month[0]=="0":
+    if len(month)==2 and month[0]=="0":
         month = month[1]
     sheet_name = "{}年{}月".format(year,month)
     sheet = wb.worksheet(sheet_name)
