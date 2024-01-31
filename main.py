@@ -3,13 +3,13 @@ import pandas as pd
 from typing import Union
 from fastapi import FastAPI, Response
 from datetime import datetime
-import os
+import os,ast
 
 
 
 
-credentials = os.environ["CREDENTIALS"]
-authorized_user = os.environ["AUTHORIZED_USER"]
+credentials = ast.literal_eval(os.environ["CREDENTIALS"])
+authorized_user = ast.literal_eval(os.environ["AUTHORIZED_USER"])
 gc, authorized_user = gspread.oauth_from_dict(credentials, authorized_user)
 
 wb = gc.open_by_key(os.environ['input_key'])
