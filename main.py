@@ -13,6 +13,8 @@ gc, authorized_user = gspread.oauth_from_dict(credentials, authorized_user)
 
 wb = gc.open_by_key(os.environ['input_key'])
 app = FastAPI()
+shifts = {}
+
 
 def process_person(person, year):
     shift = {}
@@ -91,7 +93,12 @@ def get_shift_date(date: str, person_shift: dict):
     }
     return load
 
-
+today = datetime.today().strftime('%Y-%m-%d').split("-")
+month = f"{today[0]}-{today[1]}"
+shifts[month] = get_person_shift_month(month)
+if int(today[-1])>25:
+    month = f"{today[0]}-{str(int(today[1])+1)}"
+    shifts[month] = get_person_shift_month(month)
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
@@ -100,6 +107,7 @@ def read_root():
 def appropriate_hour(hour):
     if hour[:2] == "24":
         hour = "23:59"
+    hour = hour.replace("：",":")
     if len(hour) > 5:
         return datetime.strptime(hour, "%H:%M:%S").time()
     else:
@@ -108,7 +116,7 @@ def appropriate_hour(hour):
 
 @app.get("/bydate/{date}/")
 def read_shift_date(
-    date: str, start_time: str = "9", end_time: str = "18", q: Union[str, None] = None
+    date: str, start_time: str = "8", end_time: str = "18", q: Union[str, None] = None
 ):
     formatted_load = [f"{date}のシフトはこちらです"]
     start_time = datetime.strptime(start_time, "%H").time()
@@ -116,8 +124,12 @@ def read_shift_date(
         end_time = datetime.strptime("23:59", "%H:%M").time()
     else:
         end_time = datetime.strptime(end_time, "%H").time()
-
-    load = get_shift_date(date, get_person_shift_month(date))
+    try:
+        load = get_shift_date(date, shifts["{}-{}".format(*date.split("-")[:2])])
+    except KeyError as e:
+        formatted_load.append(f"{e.args[0]}のシフトは見つかりませんでした、/getshift/{e.args[0]}からアップデートしてください")
+        return Response("\n".join(formatted_load), media_type="text/plain")
+    
     if len(load) == 0:
         formatted_load.append("No shift")
     else:
@@ -143,7 +155,11 @@ def read_shift_person(month: str, person: str, q: Union[str, None] = None):
     need to fix this to handle no user
     """
     formatted_load = [f"{person}の{month}シフトはこちらです"]
-    load = get_shift_person(person, get_person_shift_month(month))
+    try:
+        load = get_shift_person(person, shifts[month])
+    except KeyError as e:
+        formatted_load.append(f"{e.args[0]}のシフトは見つかりませんでした、/getshift/{e.args[0]}からアップデートしてください")
+        return Response("\n".join(formatted_load), media_type="text/plain")
     if len(load) == 0 or "error" in load.keys():
         formatted_load.append(load.get("error", "No shift"))
     else:
@@ -160,3 +176,13 @@ def read_shift_person(month: str, person: str, q: Union[str, None] = None):
     formatted_load = "\n".join(formatted_load)
 
     return Response(formatted_load, media_type="text/plain")
+
+@app.get("/getshift/{month}")
+def get_shift(month):
+    global shifts
+    shifts[month] = get_person_shift_month(month)
+    return Response("shift updated",media_type="text/plain")
+
+@app.get("/showshift")
+def show_shift():
+    return shifts
