@@ -5,6 +5,8 @@ from fastapi import FastAPI, Response
 from datetime import datetime,timedelta
 import os,ast
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from tabulate import tabulate
 
 load_dotenv()
 credentials = ast.literal_eval(os.environ["CREDENTIALS"])
@@ -122,6 +124,7 @@ def process_load(load,
                 formatted_load,keyword,
                 start_time=datetime.strptime("00:01", "%H:%M").time(),
                 end_time=datetime.strptime("23:59", "%H:%M").time()):
+    table = []
     if len(load)==0:
         if "error" in load.keys():
             formatted_load.append(load.get("error", "No shift"))
@@ -129,6 +132,8 @@ def process_load(load,
             formatted_load.append("No shift")
     else:
         for var, item in load.items():
+            if var=="Nigel":
+                var="ナイジェル"
             location = item["location"]
             if location=="":
                 location = "不明"
@@ -137,10 +142,17 @@ def process_load(load,
                 end = appropriate_hour(item["end"])
                 if start <= start_time and end >= end_time:
                     continue
-            formatted_load.append(
-                    f"{var} {item['start']} から {item['end']} まで、稼働時間: {item['work_time']}時間 勤務地:{location}"
-                )
+            table.append({"　　":var,"開業":item['start'],"終業":item['end'],"勤務地":location,"稼働時間":f"{item['work_time']}時間"})
+    formatted_load.append(tabulate(table,headers='keys'))
     return formatted_load
+
+
+class Shift(BaseModel):
+    name: str
+    start_time: str
+    end_time: str
+    work_time: str
+    location: str
 
 @app.get("/bydate/{date}/")
 def show_shift_date(
