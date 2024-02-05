@@ -7,6 +7,7 @@ import os,ast
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from tabulate import tabulate
+import pandas as pd
 
 load_dotenv()
 credentials = ast.literal_eval(os.environ["CREDENTIALS"])
@@ -90,12 +91,12 @@ def show_shift(var: str, person_shift: dict,keyword:str):
 
     return load
 
-today = datetime.today().strftime('%Y-%m-%d').split("-")
-month = f"{today[0]}-{today[1]}"
-shifts[month] = get_shift_data(month)
-if int(today[-1])>25:
-    month = f"{today[0]}-{str(int(today[1])+1)}"
-    shifts[month] = get_shift_data(month)
+today_startup = datetime.today().strftime('%Y-%m-%d').split("-")
+month_startup = f"{today_startup[0]}-{today_startup[1]}"
+shifts[month_startup] = get_shift_data(month_startup)
+if int(today_startup[-1])>25:
+    month = f"{today_startup[0]}-{str(int(today_startup[1])+1)}"
+    shifts[month_startup] = get_shift_data(month_startup)
 
 @app.get("/")
 def read_root():
@@ -222,3 +223,29 @@ def show_shift_all(month):
         formatted_load.append("\n")
         final_load.extend(formatted_load)
     return Response("\n".join(final_load), media_type="text/plain")
+
+@app.get("/byrange/{date_start}~{date_finish}")
+def show_shift_range(
+    date_start: str,date_finish: str, start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
+):
+    dates = [str(date.date()) for date in pd.date_range(start=date_start,end=date_finish)]
+    formatted_load = []    
+    start_time = datetime.strptime(start_time, "%H").time()
+    if end_time == "24":
+        end_time = datetime.strptime("23:59", "%H:%M").time()
+    else:
+        end_time = datetime.strptime(end_time, "%H").time()
+    for date in dates:
+        formatted_load.append(f"{date}のシフトはこちらです")
+        month = "{}-{}".format(*date.split("-")[:2])
+        try:
+            load = get_load(date,month,"date")
+        except IndexError as e:
+            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        except gspread.exceptions.WorksheetNotFound as e:
+            formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        process_load(load,formatted_load,"date",start_time,end_time)
+        formatted_load.append("\n")
+    return Response("\n".join(formatted_load), media_type="text/plain")
