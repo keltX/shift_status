@@ -126,15 +126,10 @@ def process_load(load,
                 start_time=datetime.strptime("00:01", "%H:%M").time(),
                 end_time=datetime.strptime("23:59", "%H:%M").time()):
     table = []
-    if len(load)==0:
-        if "error" in load.keys():
-            formatted_load.append(load.get("error", "No shift"))
-        else:
-            formatted_load.append("No shift")
+    if len(load)==0 or "error" in load.keys():
+        formatted_load.append(load.get("error", "No shift"))
     else:
         for var, item in load.items():
-            if var=="Nigel":
-                var="ナイジェル"
             location = item["location"]
             if location=="":
                 location = "不明"
@@ -189,9 +184,6 @@ def show_shift_date(
 
 @app.get("/byperson/{person}/")
 def show_shift_person(person: str, q: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m")):
-    """
-    need to fix this to handle no user
-    """
     formatted_load = [f"{person}の{month}シフトはこちらです"]
     try:
         load = get_load(person,month,"person")
@@ -247,5 +239,22 @@ def show_shift_range(
             formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
             return Response("\n".join(formatted_load), media_type="text/plain")
         process_load(load,formatted_load,"date",start_time,end_time)
+        formatted_load.append("\n")
+    return Response("\n".join(formatted_load), media_type="text/plain")
+
+@app.get("/bymultipleperson/{persons}")
+def show_shift_range(persons: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m")):
+    formatted_load = []
+    for person in persons.split(","):
+        formatted_load.append(f"{person}の{month}シフトはこちらです")
+        try:
+            load = get_load(person,month,"person")
+        except IndexError as e:
+            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        except gspread.exceptions.WorksheetNotFound as e:
+            formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        process_load(load,formatted_load,"person")
         formatted_load.append("\n")
     return Response("\n".join(formatted_load), media_type="text/plain")
