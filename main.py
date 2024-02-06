@@ -18,11 +18,21 @@ wb = gc.open_by_key(os.environ['input_key'])
 app = FastAPI()
 shifts = {}
 
+teams = {
+    "システム開発":['松下拓海','野坂総'],
+    "コーポレート":['輿石翔太','岩本美結',"三輪 夏葉"],
+    "プロダクト開発":['情野陸','本開慶多','大江祥生','Nigel','髙橋実樹'],
+    "RE.SEARCH":['岩田周一郎','後藤真人','吉田樹怜','坂田陸','井上皓陽','京山圭吾','冨岡太一']
+}
 
-def process_person(person, year):
+def get_team(name):
+    global teams
+    return [team for team,members in teams.items() if name in members][0]
+
+def process_person(data, year,person):
     shift = {}
-    month = person[1][0].replace("月", "").zfill(2)
-    for item in person[1:]:
+    month = data[1][0].replace("月", "").zfill(2)
+    for item in data[1:]:
         date = item[1].replace("日", "").zfill(2)
         start = item[3]
         end = item[4]
@@ -33,6 +43,7 @@ def process_person(person, year):
             "end": end,
             "location": location,
             "work_time": work_time,
+            "team":get_team(person)
         }
     return shift
 
@@ -63,7 +74,7 @@ def get_shift_data(month):
     person_shift = {}
     
     for person, item in result.items():
-        person_shift[person] = process_person(item, year)
+        person_shift[person] = process_person(item, year,person)
 
     return person_shift
 
@@ -123,22 +134,29 @@ def get_load(var,month,keyword):
 
 def process_load(load,
                 formatted_load,keyword,
+                req_team=[''],
                 start_time=datetime.strptime("00:01", "%H:%M").time(),
-                end_time=datetime.strptime("23:59", "%H:%M").time()):
+                end_time=datetime.strptime("23:59", "%H:%M").time(),
+                ):
     table = []
+    if req_team==['']:
+        req_team = teams.keys()
     if len(load)==0 or "error" in load.keys():
         formatted_load.append(load.get("error", "No shift"))
     else:
         for var, item in load.items():
-            location = item["location"]
-            if location=="":
-                location = "不明"
+            team=item['team']
             if keyword == "date":
                 start = appropriate_hour(item["start"])
                 end = appropriate_hour(item["end"])
                 if start <= start_time and end >= end_time:
                     continue
-            table.append({"　　":var,"開業":item['start'],"終業":item['end'],"勤務地":location,"稼働時間":f"{item['work_time']}時間"})
+                if not team in req_team:
+                    continue
+            location = item["location"]
+            if location=="":
+                location = "不明"
+            table.append({"　　":var,"開業":item['start'],"終業":item['end'],"勤務地":location,"稼働時間":f"{item['work_time']}時間","チーム":team})
     formatted_load.append(tabulate(table,headers='keys'))
     return formatted_load
 
@@ -150,52 +168,56 @@ class Shift(BaseModel):
     work_time: str
     location: str
 
-@app.get("/bydate/{date}/")
+@app.get("/bydate/{date_start}/")
 def show_shift_date(
-    date: str, start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
+    date_start: str, req_team: str ="",date_end="", start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
 ):
     start_time = datetime.strptime(start_time, "%H").time()
     if end_time == "24":
         end_time = datetime.strptime("23:59", "%H:%M").time()
     else:
         end_time = datetime.strptime(end_time, "%H").time()
-
+    req_team = req_team.split(",")
     shortcut = {"today": datetime.now().strftime("%Y-%m-%d"),
                 "tomorrow": (datetime.now() + timedelta(1)).strftime("%Y-%m-%d"),
                 "yesterday": (datetime.now() + timedelta(-1)).strftime("%Y-%m-%d")}
-    
-    if date in shortcut.keys():
-        date = shortcut[date]
-
-    month = "{}-{}".format(*date.split("-")[:2])
-    formatted_load = [f"{date}のシフトはこちらです"]
-    try:
-        load = get_load(date,month,"date")
-    except IndexError as e:
-        formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
-        return Response("\n".join(formatted_load), media_type="text/plain")
-    except gspread.exceptions.WorksheetNotFound as e:
-        formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
-        return Response("\n".join(formatted_load), media_type="text/plain")
-    formatted_load = "\n".join(process_load(load,formatted_load,"date",start_time,end_time))
-    return Response(formatted_load, media_type="text/plain")
-
-
+    if date_start in shortcut.keys():
+        date_start = shortcut[date_start]
+    if date_end=="":
+        date_end=date_start
+    formatted_load = []   
+    dates = [str(date.date()) for date in pd.date_range(start=date_start,end=date_end)]
+    for date in dates:
+        formatted_load.append(f"{date}のシフトはこちらです")
+        month = "{}-{}".format(*date.split("-")[:2])
+        try:
+            load = get_load(date,month,"date")
+        except IndexError as e:
+            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        except gspread.exceptions.WorksheetNotFound as e:
+            formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        process_load(load,formatted_load,"date",req_team,start_time,end_time)
+        formatted_load.append("\n")
+    return Response("\n".join(formatted_load), media_type="text/plain")
 
 @app.get("/byperson/{person}/")
-def show_shift_person(person: str, q: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m")):
-    formatted_load = [f"{person}の{month}シフトはこちらです"]
-    try:
-        load = get_load(person,month,"person")
-    except IndexError as e:
-        formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
-        return Response("\n".join(formatted_load), media_type="text/plain")
-    except gspread.exceptions.WorksheetNotFound as e:
-        formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
-        return Response("\n".join(formatted_load), media_type="text/plain")
-    
-    formatted_load = "\n".join(process_load(load,formatted_load,"person"))
-    return Response(formatted_load, media_type="text/plain")
+def show_shift_person(person: str, q: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m"),):
+    formatted_load = []
+    for person in person.split(","):
+        formatted_load.append(f"{person}の{month}シフトはこちらです")
+        try:
+            load = get_load(person,month,"person")
+        except IndexError as e:
+            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        except gspread.exceptions.WorksheetNotFound as e:
+            formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
+            return Response("\n".join(formatted_load), media_type="text/plain")
+        process_load(load,formatted_load,"person")
+        formatted_load.append("\n")
+    return Response("\n".join(formatted_load), media_type="text/plain")
 
 @app.get("/getshift/{month}")
 def get_shift(month):
@@ -215,46 +237,3 @@ def show_shift_all(month):
         formatted_load.append("\n")
         final_load.extend(formatted_load)
     return Response("\n".join(final_load), media_type="text/plain")
-
-@app.get("/byrange/{date_start}~{date_finish}")
-def show_shift_range(
-    date_start: str,date_finish: str, start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
-):
-    dates = [str(date.date()) for date in pd.date_range(start=date_start,end=date_finish)]
-    formatted_load = []    
-    start_time = datetime.strptime(start_time, "%H").time()
-    if end_time == "24":
-        end_time = datetime.strptime("23:59", "%H:%M").time()
-    else:
-        end_time = datetime.strptime(end_time, "%H").time()
-    for date in dates:
-        formatted_load.append(f"{date}のシフトはこちらです")
-        month = "{}-{}".format(*date.split("-")[:2])
-        try:
-            load = get_load(date,month,"date")
-        except IndexError as e:
-            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
-            return Response("\n".join(formatted_load), media_type="text/plain")
-        except gspread.exceptions.WorksheetNotFound as e:
-            formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
-            return Response("\n".join(formatted_load), media_type="text/plain")
-        process_load(load,formatted_load,"date",start_time,end_time)
-        formatted_load.append("\n")
-    return Response("\n".join(formatted_load), media_type="text/plain")
-
-@app.get("/bymultipleperson/{persons}")
-def show_shift_range(persons: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m")):
-    formatted_load = []
-    for person in persons.split(","):
-        formatted_load.append(f"{person}の{month}シフトはこちらです")
-        try:
-            load = get_load(person,month,"person")
-        except IndexError as e:
-            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
-            return Response("\n".join(formatted_load), media_type="text/plain")
-        except gspread.exceptions.WorksheetNotFound as e:
-            formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
-            return Response("\n".join(formatted_load), media_type="text/plain")
-        process_load(load,formatted_load,"person")
-        formatted_load.append("\n")
-    return Response("\n".join(formatted_load), media_type="text/plain")
