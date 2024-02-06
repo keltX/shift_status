@@ -22,12 +22,15 @@ teams = {
     "システム開発":['松下拓海','野坂総'],
     "コーポレート":['輿石翔太','岩本美結',"三輪 夏葉"],
     "プロダクト開発":['情野陸','本開慶多','大江祥生','Nigel','髙橋実樹'],
-    "RE.SEARCH":['岩田周一郎','後藤真人','吉田樹怜','坂田陸','井上皓陽','京山圭吾','冨岡太一']
+    "RE.SEARCH":['岩田周一郎','後藤真人','吉田樹怜','坂田陸','井上皓陽','京山圭吾','冨岡太一'],
 }
 
 def get_team(name):
     global teams
-    return [team for team,members in teams.items() if name in members][0]
+    try:
+        return [team for team,members in teams.items() if name in members][0]
+    except IndexError:
+        return "不明"
 
 def process_person(data, year,person):
     shift = {}
@@ -43,10 +46,9 @@ def process_person(data, year,person):
             "end": end,
             "location": location,
             "work_time": work_time,
-            "team":get_team(person)
+            "team":get_team(person),
         }
     return shift
-
 
 def get_shift_data(month):
     result = {}
@@ -78,7 +80,6 @@ def get_shift_data(month):
 
     return person_shift
 
-
 def show_shift(var: str, person_shift: dict,keyword:str):
     assert keyword in ("person","date")
     df = pd.DataFrame.from_dict(person_shift, orient="index")
@@ -102,13 +103,16 @@ def show_shift(var: str, person_shift: dict,keyword:str):
 
     return load
 
-today_startup = datetime.today().strftime('%Y-%m-%d').split("-")
-month_startup = f"{today_startup[0]}-{today_startup[1]}"
-shifts[month_startup] = get_shift_data(month_startup)
-if int(today_startup[-1])>25:
-    month = f"{today_startup[0]}-{str(int(today_startup[1])+1)}"
+def start_up():
+    global shifts
+    today_startup = datetime.today().strftime('%Y-%m-%d').split("-")
+    month_startup = f"{today_startup[0]}-{today_startup[1]}"
     shifts[month_startup] = get_shift_data(month_startup)
+    if int(today_startup[-1])>25:
+        month_startup = f"{today_startup[0]}-{str(int(today_startup[1])+1)}"
+        shifts[month_startup] = get_shift_data(month_startup)
 
+start_up()
 @app.get("/")
 def read_root():
     return "Welcome, hello world"
@@ -160,7 +164,6 @@ def process_load(load,
     formatted_load.append(tabulate(table,headers='keys'))
     return formatted_load
 
-
 class Shift(BaseModel):
     name: str
     start_time: str
@@ -193,7 +196,7 @@ def show_shift_date(
         try:
             load = get_load(date,month,"date")
         except IndexError as e:
-            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
+            formatted_load.append(f"{month}のシフトはエラー発生しました、ナイジェル・清野を報告してください")
             return Response("\n".join(formatted_load), media_type="text/plain")
         except gspread.exceptions.WorksheetNotFound as e:
             formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
@@ -202,16 +205,16 @@ def show_shift_date(
         formatted_load.append("\n")
     return Response("\n".join(formatted_load), media_type="text/plain")
 
-@app.get("/byperson/{person}/")
-def show_shift_person(person: str, q: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m"),):
+@app.get("/byperson/{persons}/")
+def show_shift_person(persons: str, q: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m"),):
     formatted_load = []
-    for person in person.split(","):
+    for person in persons.split(","):    
         formatted_load.append(f"{person}の{month}シフトはこちらです")
         try:
             load = get_load(person,month,"person")
-        except IndexError as e:
-            formatted_load.append(f"{month}のシフトは見つかりませんでした、ナイジェル・清野を報告してください")
-            return Response("\n".join(formatted_load), media_type="text/plain")
+        except KeyboardInterrupt as e:
+            formatted_load.append(f"{month}のシフトはエラー発生しました、ナイジェル・清野を報告してください")
+            return Response("\n".join(formatted_load), media_type="text/plain") 
         except gspread.exceptions.WorksheetNotFound as e:
             formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
             return Response("\n".join(formatted_load), media_type="text/plain")
@@ -220,7 +223,7 @@ def show_shift_person(person: str, q: Union[str, None] = None, month: str = date
     return Response("\n".join(formatted_load), media_type="text/plain")
 
 @app.get("/getshift/{month}")
-def get_shift(month):
+def download_shift(month):
     global shifts
     shifts[month] = get_shift_data(month)
     return Response("shift updated",media_type="text/plain")
