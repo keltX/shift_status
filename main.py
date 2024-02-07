@@ -10,9 +10,7 @@ from tabulate import tabulate
 import pandas as pd
 
 load_dotenv()
-credentials = ast.literal_eval(os.environ["CREDENTIALS"])
-authorized_user = ast.literal_eval(os.environ["AUTHORIZED_USER"])
-gc, authorized_user = gspread.oauth_from_dict(credentials, authorized_user)
+gc = gspread.service_account_from_dict(ast.literal_eval(os.environ["SERVICE_ACCOUNT"]))
 
 wb = gc.open_by_key(os.environ['input_key'])
 app = FastAPI()
