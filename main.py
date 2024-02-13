@@ -12,11 +12,11 @@ import pandas as pd
 load_dotenv()
 
 service_account = {
-    item:os.environ.get(item.upper()).replace('\\n', '\n') for item in ['type', 'project_id', 'private_key_id', 'private_key', 'client_email', 'client_id', 'auth_uri', 'token_uri', 'auth_provider_x509_cert_url', 'client_x509_cert_url', 'universe_domain']
+    item:os.environ.get(item.upper()) for item in ['type', 'project_id', 'private_key_id', 'private_key', 'client_email', 'client_id', 'auth_uri', 'token_uri', 'auth_provider_x509_cert_url', 'client_x509_cert_url', 'universe_domain']
 }
-
-gc = gspread.service_account_from_dict(service_account)
-
+#print(service_account)
+#gc = gspread.service_account_from_dict(service_account)
+gc = gspread.service_account("etc\secret\service_account.json")
 wb = gc.open_by_key(os.environ['INPUT_KEY'])
 app = FastAPI()
 shifts = {}
