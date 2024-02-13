@@ -17,7 +17,7 @@ service_account = {
 
 gc = gspread.service_account_from_dict(service_account)
 
-wb = gc.open_by_key(os.environ['input_key'])
+wb = gc.open_by_key(os.environ['INPUT_KEY'])
 app = FastAPI()
 shifts = {}
 profile = wb.worksheet("インターン生請求書フォーマットリンク集").get_all_records()
