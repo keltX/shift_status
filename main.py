@@ -140,7 +140,9 @@ def process_load(load,
                 ):
     table = []
     if req_team==['']:
-        req_team = teams.keys()
+        #default value for team
+        req_team = set(teams.values())
+        print(req_team)
     if len(load)==0 or "error" in load.keys():
         formatted_load.append(load.get("error", "No shift"))
     else:
