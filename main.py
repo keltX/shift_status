@@ -16,7 +16,7 @@ service_account = {
 }
 #print(service_account)
 #gc = gspread.service_account_from_dict(service_account)
-gc = gspread.service_account("etc\secret\service_account.json")
+gc = gspread.service_account("etc\secrets\service_account.json")
 wb = gc.open_by_key(os.environ['INPUT_KEY'])
 app = FastAPI()
 shifts = {}
