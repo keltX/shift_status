@@ -10,27 +10,23 @@ from tabulate import tabulate
 import pandas as pd
 
 load_dotenv()
-gc = gspread.service_account_from_dict(ast.literal_eval(os.environ["SERVICE_ACCOUNT"]))
+service_account = {
+    item:os.environ.get(item.upper()) for item in ['type', 'project_id', 'private_key_id', 'private_key', 'client_email', 'client_id', 'auth_uri', 'token_uri', 'auth_provider_x509_cert_url', 'client_x509_cert_url', 'universe_domain']
+}
+gc = gspread.service_account_from_dict(service_account)
 
 wb = gc.open_by_key(os.environ['input_key'])
 app = FastAPI()
 shifts = {}
+profile = wb.worksheet("インターン生請求書フォーマットリンク集").get_all_records()
+profiledf = pd.DataFrame.from_records(profile,columns=profile[0].keys()).set_index("Slack_id")
+teams = profiledf.set_index('氏名')['Team'].to_dict()
 
-teams = {
-    "システム開発":['松下拓海','野坂総'],
-    "コーポレート":['輿石翔太','岩本美結',"三輪 夏葉"],
-    "プロダクト開発":['情野陸','本開慶多','大江祥生','Nigel','髙橋実樹'],
-    "RE.SEARCH":['岩田周一郎','後藤真人','吉田樹怜','坂田陸','井上皓陽','京山圭吾','冨岡太一'],
-}
 
-def get_team(name):
-    global teams
-    try:
-        return [team for team,members in teams.items() if name in members][0]
-    except IndexError:
-        return "不明"
+
 
 def process_person(data, year,person):
+    global teams
     shift = {}
     month = data[1][0].replace("月", "").zfill(2)
     for item in data[1:]:
@@ -44,7 +40,7 @@ def process_person(data, year,person):
             "end": end,
             "location": location,
             "work_time": work_time,
-            "team":get_team(person),
+            "team":teams.get(person,"unknown"),
         }
     return shift
 
@@ -171,14 +167,14 @@ class Shift(BaseModel):
 
 @app.get("/bydate/{date_start}/")
 def show_shift_date(
-    date_start: str, req_team: str ="",date_end="", start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
+    date_start: str, team: str ="",date_end="", start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
 ):
     start_time = datetime.strptime(start_time, "%H").time()
     if end_time == "24":
         end_time = datetime.strptime("23:59", "%H:%M").time()
     else:
         end_time = datetime.strptime(end_time, "%H").time()
-    req_team = req_team.split(",")
+    team = team.split(",")
     shortcut = {"today": datetime.now().strftime("%Y-%m-%d"),
                 "tomorrow": (datetime.now() + timedelta(1)).strftime("%Y-%m-%d"),
                 "yesterday": (datetime.now() + timedelta(-1)).strftime("%Y-%m-%d")}
@@ -199,14 +195,15 @@ def show_shift_date(
         except gspread.exceptions.WorksheetNotFound as e:
             formatted_load.append(f"{e.args[0]}のシフトはインターン生シフト表にありませんでした。確認の上再開してください")
             return Response("\n".join(formatted_load), media_type="text/plain")
-        process_load(load,formatted_load,"date",req_team,start_time,end_time)
+        process_load(load,formatted_load,"date",team,start_time,end_time)
         formatted_load.append("\n")
     return Response("\n".join(formatted_load), media_type="text/plain")
 
 @app.get("/byperson/{persons}/")
 def show_shift_person(persons: str, q: Union[str, None] = None, month: str = datetime.now().strftime("%Y-%m"),):
     formatted_load = []
-    for person in persons.split(","):    
+    for person in persons.split(" "):
+        person = profiledf.loc[person.replace('@','')]["氏名"]    
         formatted_load.append(f"{person}の{month}シフトはこちらです")
         try:
             load = get_load(person,month,"person")
