@@ -24,9 +24,6 @@ profile = wb.worksheet("インターン生請求書フォーマットリンク�
 profiledf = pd.DataFrame.from_records(profile,columns=profile[0].keys()).set_index("Slack_id")
 teams = profiledf.set_index('氏名')['Team'].to_dict()
 
-
-
-
 def process_person(data, year,person):
     global teams
     shift = {}
@@ -142,7 +139,6 @@ def process_load(load,
     if req_team==['']:
         #default value for team
         req_team = set(teams.values())
-        print(req_team)
     if len(load)==0 or "error" in load.keys():
         formatted_load.append(load.get("error", "No shift"))
     else:
