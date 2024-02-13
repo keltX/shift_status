@@ -2,8 +2,9 @@ import gspread
 import pandas as pd
 from typing import Union
 from fastapi import FastAPI, Response
+from fastapi.responses import HTMLResponse
 from datetime import datetime,timedelta
-import os,ast
+import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from tabulate import tabulate
@@ -110,7 +111,19 @@ def start_up():
 start_up()
 @app.get("/")
 def read_root():
-    return "Welcome, hello world"
+    html_response = """
+    <html>
+        <head>
+            <title>シフト状態確認プログ</title>
+            <meta name="color-scheme" content="light dark">
+        </head>
+        <body>
+            <h1>マニュアルはこちら</h1>
+            <a href="https://www.notion.so/trustart/b788be5013fb4d1fbaa1a55126e4aa28?pvs=4">マニュアル<a>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_response,status_code=200)
 
 def appropriate_hour(hour):
     if hour[:2] == "24":
