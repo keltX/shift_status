@@ -22,6 +22,7 @@ except Exception as e:
     gc = gspread.service_account(os.path.abspath(secret_file_location))
 wb = gc.open_by_key(os.environ['INPUT_KEY'])
 app = FastAPI()
+
 shifts = {}
 profile = wb.worksheet("インターン生請求書フォーマットリンク集").get_all_records()
 profiledf = pd.DataFrame.from_records(profile,columns=profile[0].keys()).set_index("Slack_id")
@@ -100,7 +101,7 @@ def show_shift(var: str, person_shift: dict,keyword:str):
     return load
 
 def start_up():
-    global shifts
+    global shifts,teams
     today_startup = datetime.today().strftime('%Y-%m-%d').split("-")
     month_startup = f"{today_startup[0]}-{today_startup[1]}"
     shifts[month_startup] = get_shift_data(month_startup)
@@ -173,13 +174,6 @@ def process_load(load,
     formatted_load.append(tabulate(table,headers='keys'))
     return formatted_load
 
-class Shift(BaseModel):
-    name: str
-    start_time: str
-    end_time: str
-    work_time: str
-    location: str
-
 @app.get("/bydate/{date_start}/")
 def show_shift_date(
     date_start: str, team: str ="",date_end="", start_time: str = "6", end_time: str = "18", q: Union[str, None] = None
@@ -250,3 +244,16 @@ def show_shift_all(month):
         formatted_load.append("\n")
         final_load.extend(formatted_load)
     return Response("\n".join(final_load), media_type="text/plain")
+@app.get("/refresh")
+def refresh_shift():
+    """
+    On default this function would be called via uptime robot every 5minute
+    the purpose is to refresh the data of the current/running month
+    """
+    global shifts,teams
+    month = datetime.today().strftime('%Y-%m')
+    shifts[month] = get_shift_data(month)
+    profile = wb.worksheet("インターン生請求書フォーマットリンク集").get_all_records()
+    profiledf = pd.DataFrame.from_records(profile,columns=profile[0].keys()).set_index("Slack_id")
+    teams = profiledf.set_index('氏名')['Team'].to_dict()
+    return Response("data refreshed", media_type="text/plain")
